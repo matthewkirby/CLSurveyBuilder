@@ -5,8 +5,8 @@ import numpy as np
 from scipy.interpolate import interp2d
 
 # This package
-import observable
-import masscatalog
+from . import observable
+from . import masscatalog
 
 # Colossus
 from colossus.halo.mass_defs import changeMassDefinition
@@ -42,8 +42,8 @@ class SurveyBuilder(object):
         """
         # Set the cosmology
         warnings.warn("Cosmology hard coded in SurveyBuilder", UserWarning)
-        self.cosmo = {'flat': True, 'H0': 100., 'Om0': 0.321, 'Ob0': 0.04945, 'sigma8': 0.8118,
-                      'ns': 0.9626}
+        self.cosmo = {'flat': True, 'H0': 100., 'Om0': 0.300, 'Ob0': 0.046, 'sigma8': 0.80,
+                      'ns': 0.972}
         setCosmology('survey cosmo', self.cosmo)
 
         # Manually set the redshift range of the survey
@@ -53,7 +53,7 @@ class SurveyBuilder(object):
 
         # Manually set survey area
         warnings.warn("Survey area constant and hard coded", UserWarning)
-        self.solid_angle = 10000.*(np.pi**2/(180.**2))
+        self.solid_angle = 2500.*(np.pi**2/(180.**2))
 
         # Manually set the observables
         warnings.warn("SurveyBuilder is hard coded to SZObservable", UserWarning)
@@ -77,7 +77,7 @@ class SurveyBuilder(object):
         - Halo mass function (if all reals are at fixed cosmology)? (TODO)
         - Inverse CDF for P(lamobs|lamtrue) from Costanzi19 (TODO)
         """
-        # self._init_mass_conversion_grids()
+        self._init_mass_conversion_grids()
 
 
     def _init_mass_conversion_grids(self):
@@ -162,7 +162,7 @@ class SurveyBuilder(object):
 
         # Save the desired outputs
 
-        return
+        return mock
 
 
 

@@ -16,7 +16,7 @@ from colossus.cosmology.cosmology import setCosmology
 from colossus.lss.mass_function import massFunction   
 
 # Imports from this package
-import cosmology_funcs as cfuncs
+from . import cosmology_funcs as cfuncs
 
 
 
