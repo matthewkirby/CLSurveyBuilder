@@ -1,12 +1,17 @@
 """Class to hold all of the grids and splines and performs the survey building"""
 # Base python imports
 import warnings
+from configparser import ConfigParser
 import numpy as np
 from scipy.interpolate import interp2d
 
 # This package
-from . import observable
-from . import masscatalog
+try:
+    from . import observable
+    from . import masscatalog
+except ImportError:
+    import observable
+    import masscatalog
 
 # Colossus
 from colossus.halo.mass_defs import changeMassDefinition
@@ -22,6 +27,18 @@ class SurveyBuilder(object):
 
     Attributes
     ----------
+    outputpath : str
+        Where do save the survey output
+    surveyname : str
+        Name of the survey. Output file will be {surveyname}{runid}.cat
+    solid_angle : float
+        Survey area in steradians
+    zmin : float
+        Minimum survey redshift
+    zmax : float
+        Maximum survey redshift
+    cosmo : dict
+        Cosmology parameters
     observables : list(Observable)
         List of observables of mock survey
 
@@ -30,40 +47,56 @@ class SurveyBuilder(object):
     - Implement A(z) rather than just A(z) = constant
     """
 
-    def __init__(self, cfgfname, initialize_grids=True):
+    def __init__(self, cfgfname):
         """Create an instance of the SurveyBuilder class
 
         Parameters
         ----------
         cfgfname : str
             Name of the config file describing the survey realizations
-        initialize_grids : bool (optional)
-            If True, initializes 1D and 2D grids needed as identified by the config file
         """
-        # Set the cosmology
-        warnings.warn("Cosmology hard coded in SurveyBuilder", UserWarning)
-        self.cosmo = {'flat': True, 'H0': 100., 'Om0': 0.300, 'Ob0': 0.046, 'sigma8': 0.80,
-                      'ns': 0.972}
+        # Load the configparser object
+        cfg = ConfigParser()
+        cfg.read(cfgfname)
+
+        # Set names and paths
+        self.outputpath = cfg.get('General', 'surveypath')
+        self.surveyname = cfg.get('General', 'surveyname')
+
+        # Set survey properties
+        self.solid_angle = cfg.getfloat('SurveyProps', 'area')*(np.pi**2/180.**2)
+        self.zmin = cfg.getfloat('SurveyProps', 'zmin')
+        self.zmax = cfg.getfloat('SurveyProps', 'zmax')
+
+        # Load the cosmology model
+        self._load_cosmology(cfg.get('General', 'cosmofile'))
         setCosmology('survey cosmo', self.cosmo)
 
-        # Manually set the redshift range of the survey
-        warnings.warn("Redshift range for survey hard coded in SurveyBuilder", UserWarning)
-        self.zmin = 0.2
-        self.zmax = 0.65
+        # Load the observables
+        self.observables = []
+        for i in range(1, cfg.getint('General', 'nobservables')+1):
+            self.observables.append(observable.Observable(cfg, i, self, quick_cm_rel=True))
 
-        # Manually set survey area
-        warnings.warn("Survey area constant and hard coded", UserWarning)
-        self.solid_angle = 2500.*(np.pi**2/(180.**2))
 
-        # Manually set the observables
-        warnings.warn("SurveyBuilder is hard coded to SZObservable", UserWarning)
-        self.observables = [observable.Observable(None)]
+    def _load_cosmology(self, cosmofile):
+        """Load the cosmology model and any scaling relation parameters
 
-        if initialize_grids:
-            self._initialize_grids()
-            self.is_init = True
-        else:
-            self.is_init = False
+        Parameters
+        ----------
+        cosmofile : str
+            Name of the cosmology file
+        """
+        cosmoin = ConfigParser()
+        cosmoin.read(cosmofile)
+        self.cosmo = {
+                'flat': cosmoin.getboolean('Cosmology', 'flat'),
+                'H0': cosmoin.getfloat('Cosmology', 'H0'),
+                'Om0': cosmoin.getfloat('Cosmology', 'Omega_M'),
+                'Ob0': cosmoin.getfloat('Cosmology', 'Omega_b'),
+                'sigma8': cosmoin.getfloat('Cosmology', 'sigma8'),
+                'ns': cosmoin.getfloat('Cosmology', 'ns')
+        }
+        return
 
 
     def _initialize_grids(self):
@@ -71,38 +104,9 @@ class SurveyBuilder(object):
 
         Notes
         -----
-        - This function should identify which grids need to be initialized from the config file
-        - Implements are m200m -> mdef spline
-        - Inverse CDF for P(r_pearson) \propto 1-r^2 (TODO)
-        - Halo mass function (if all reals are at fixed cosmology)? (TODO)
         - Inverse CDF for P(lamobs|lamtrue) from Costanzi19 (TODO)
         """
-        self._init_mass_conversion_grids()
-
-
-    def _init_mass_conversion_grids(self):
-        """Build splines to convert M200m to the mass definitions that each observable is
-        parameterized in. These splines are saved to the Observable object.
-        TODO - Upper and lower mass ranges as optional params?
-        """
-        warnings.warn("Mass conversion spline is very coarse!")
-        log10m200m = np.linspace(9, 17.5, 100, endpoint=False)
-        # log10m200m = np.linspace(9, 17.5, 400, endpoint=False)
-        m200m = np.power(10., log10m200m[np.where(log10m200m < 17.)])
-        zgrid = np.linspace(self.zmin, self.zmax, 10)
-
-        for obs in self.observables:
-            if obs.mdef is '200m':
-                continue
-
-            # Build the 2d grid, spline it, set it to Observable()
-            newmgrid = np.zeros((len(zgrid), len(m200m)))
-            for i in range(len(zgrid)):
-                c200m = concentration(m200m, '200m', zgrid[i])
-                newmgrid[i,:] = changeMassDefinition(m200m, c200m, zgrid[i], '200m', obs.mdef)[0]
-            obs.mass_conversion = interp2d(np.log(m200m), zgrid, np.log(newmgrid), kind='cubic',
-                                           bounds_error=True)
-        return
+        pass
 
 
     def _init_realization(self, runi):
@@ -163,22 +167,6 @@ class SurveyBuilder(object):
         # Save the desired outputs
 
         return mock
-
-
-
-
-
-
-
-
-
-
-
-
-if __name__ == "__main__":
-    cfgfname = ''
-    x = SurveyBuilder(cfgfname, initialize_grids=True)
-    x.build_survey('zetascatter', 1, save_m200=True, save_allmass=False, save_intr=False, save_obs=False)
 
 
 

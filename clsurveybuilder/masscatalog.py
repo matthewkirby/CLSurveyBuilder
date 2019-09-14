@@ -10,7 +10,10 @@ from pandas import DataFrame
 from colossus.lss.mass_function import massFunction
 
 # Imports from this package
-from . import cosmology_funcs as cfuncs
+try:
+    from . import cosmology_funcs as cfuncs
+except ImportError:
+    import cosmology_funcs as cfuncs
 
 
 def _draw_clusters(grid):
